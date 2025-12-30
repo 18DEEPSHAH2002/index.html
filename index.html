@@ -99,22 +99,39 @@
             { name: "RTA", gid: "1563439729" }
         ];
 
-        async function fetchSheetData(gid) {
-            const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:json&gid=${gid}`;
-            try {
-                const response = await fetch(url);
-                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-                const text = await response.text();
+        function fetchSheetData(gid) {
+            return new Promise((resolve, reject) => {
+                const callbackName = 'callback_' + gid + '_' + Math.floor(Math.random() * 100000);
                 
-                // Parse JSON from the JSONP-like response
-                // Response format: /*O_o*/\n google.visualization.Query.setResponse({...});
-                const jsonText = text.substring(text.indexOf("(") + 1, text.lastIndexOf(")"));
-                const data = JSON.parse(jsonText);
-                return data;
-            } catch (error) {
-                console.error(`Error fetching GID ${gid}:`, error);
-                return null;
-            }
+                const timeout = setTimeout(() => {
+                    cleanup();
+                    console.error(`Timeout fetching GID ${gid}`);
+                    resolve(null); 
+                }, 15000); // 15 seconds timeout
+
+                window[callbackName] = (data) => {
+                    cleanup();
+                    resolve(data);
+                };
+
+                const script = document.createElement('script');
+                // Use JSONP via responseHandler. tqx=responseHandler:callbackName
+                // Also add &_ to prevent caching
+                script.src = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=responseHandler:${callbackName}&gid=${gid}&_=${Date.now()}`;
+                script.onerror = () => {
+                    cleanup();
+                    console.error(`Script error fetching GID ${gid}`);
+                    resolve(null);
+                };
+                
+                document.body.appendChild(script);
+
+                function cleanup() {
+                    clearTimeout(timeout);
+                    delete window[callbackName];
+                    if (script.parentNode) script.parentNode.removeChild(script);
+                }
+            });
         }
 
         function analyzeData(data) {
@@ -128,18 +145,12 @@
             for (let i = 0; i < cols.length; i++) {
                 if (cols[i].label && cols[i].label.trim().toLowerCase() === 'status') {
                     statusIdx = i;
-                    break;
+                    // We continue searching to find the LAST column with name "Status"
+                    // This ensures we get the latest week if new weeks are appended to the right.
                 }
             }
 
             if (statusIdx === -1) {
-                // Try searching in the first few rows if headers are not in cols definition properly
-                // Sometimes gviz puts headers in the first row of data
-                // But usually cols.label is correct if the sheet is structured well.
-                // In our test, "Status" was in cols id "G".
-                // If not found, default to column G (index 6) or H?
-                // Based on image and CSV, Status is usually around column G.
-                // But let's assume if we can't find "Status", it's an error or we check common indices.
                 return 'Structure Error'; 
             }
 
@@ -150,7 +161,8 @@
                 const cell = row.c[statusIdx];
                 if (cell && cell.v) {
                     const val = String(cell.v).toLowerCase();
-                    if (val.includes('pending')) {
+                    // Check for 'pending' or 'incomplete'
+                    if (val.includes('pending') || val.includes('incomplete')) {
                         isIncomplete = true;
                         break;
                     }
@@ -160,7 +172,12 @@
             return isIncomplete ? 'Incomplete' : 'Completed';
         }
 
+        let currentFetchId = 0;
+
         async function fetchData() {
+            currentFetchId++;
+            const myFetchId = currentFetchId;
+
             const tableBody = document.getElementById('table-body');
             const loading = document.getElementById('loading');
             const table = document.getElementById('status-table');
@@ -175,16 +192,21 @@
 
             let completedCount = 0;
             let incompleteCount = 0;
-            const results = [];
 
-            // We can fetch in parallel
+            // Use Promise.all to fetch concurrently
             const promises = OFFICERS.map(async (officer) => {
                 const data = await fetchSheetData(officer.gid);
                 let status = 'Error';
                 if (data) {
-                    status = analyzeData(data);
+                    if (data.status === 'error') {
+                        status = 'Sheet Error';
+                        if (data.errors && data.errors.length > 0) {
+                             console.error(`Sheet Error for ${officer.name}:`, data.errors);
+                        }
+                    } else {
+                        status = analyzeData(data);
+                    }
                 } else {
-                    // Fallback or retry?
                     status = 'Fetch Error';
                 }
                 return { name: officer.name, status: status };
@@ -192,8 +214,14 @@
 
             const officerResults = await Promise.all(promises);
 
-            // Sort results to match original order (Promise.all preserves order, but good to be sure)
-            // Actually Promise.all preserves order of input array.
+            // Check race condition
+            if (myFetchId !== currentFetchId) {
+                console.log("Stale fetch ignored.");
+                return;
+            }
+
+            // Clear again to be safe
+            tableBody.innerHTML = '';
 
             officerResults.forEach(res => {
                 const tr = document.createElement('tr');
@@ -215,8 +243,6 @@
                 } else {
                     badge.classList.add('badge-error');
                     badge.textContent = res.status;
-                    // Count error as incomplete? User said "IF ANY ONE ... IS INCOMPLETE ... TAKE STATUS AS INCOMPLETE".
-                    // But error is unknown. Let's not count as completed.
                 }
 
                 statusTd.appendChild(badge);
@@ -227,7 +253,6 @@
 
             document.getElementById('count-completed').innerText = completedCount;
             document.getElementById('count-incomplete').innerText = incompleteCount;
-            // Total might differ if errors, but usually total is fixed.
             
             loading.style.display = 'none';
             table.style.display = 'table';
