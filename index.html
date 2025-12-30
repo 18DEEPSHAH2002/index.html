@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Officer Task Status Dashboard</title>
+    
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; background-color: #f4f6f8; color: #333; }
@@ -21,6 +21,11 @@
         .dashboard-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 30px; }
         @media (max-width: 1100px) { .dashboard-grid { grid-template-columns: 1fr; } }
 
+        .project-grid { display: grid; grid-template-columns: 1fr 2fr; gap: 30px; margin-bottom: 30px; }
+        @media (max-width: 1100px) { .project-grid { grid-template-columns: 1fr; } }
+        
+        .sub-grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
+
         .section-title { font-size: 1.2em; font-weight: 600; color: #34495e; margin-bottom: 15px; border-bottom: 2px solid #eee; padding-bottom: 10px; }
 
         table { width: 100%; border-collapse: collapse; margin-top: 10px; border-radius: 8px; overflow: hidden; box-shadow: 0 0 10px rgba(0,0,0,0.05); }
@@ -33,6 +38,7 @@
         .badge-completed { background-color: #d5f5e3; color: #27ae60; }
         .badge-incomplete { background-color: #fadbd8; color: #c0392b; }
         .badge-error { background-color: #fcf3cf; color: #f39c12; }
+        .badge-info { background-color: #d6eaf8; color: #2980b9; }
 
         .loading-text { text-align: center; color: #7f8c8d; margin: 20px; font-style: italic; }
         .refresh-btn { display: block; margin: 20px auto 0; padding: 10px 20px; background-color: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 1em; transition: background 0.3s; }
@@ -40,61 +46,119 @@
         .timestamp { text-align: right; color: #95a5a6; font-size: 0.85em; margin-top: 15px; }
 
         .chart-container { position: relative; height: 400px; width: 100%; margin-top: 40px; }
+        
+        .full-width-section { margin-bottom: 30px; }
+        .no-data { text-align: center; padding: 20px; color: #7f8c8d; font-style: italic; background: #f8f9fa; border-radius: 8px; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Officer Task Status Dashboard</h1>
-        
-        <div class="summary-cards">
-            <div class="card bg-green">
-                <h3>Officers Completed</h3>
-                <p id="count-completed">-</p>
-            </div>
-            <div class="card bg-red">
-                <h3>Officers Incomplete</h3>
-                <p id="count-incomplete">-</p>
-            </div>
-            <div class="card bg-blue">
-                <h3>Total Officers</h3>
-                <p id="count-total">-</p>
-            </div>
-        </div>
-
+    
         <div id="loading" class="loading-text">Fetching data from Google Sheets...</div>
         
-        <div class="dashboard-grid" id="main-content" style="display: none;">
-            <div>
-                <div class="section-title">Weekly Status (Individual Sheets)</div>
-                <table id="status-table">
-                    <thead>
-                        <tr>
-                            <th>Officer Name</th>
-                            <th>Status</th>
-                            <th>Incomplete Tasks</th>
-                        </tr>
-                    </thead>
-                    <tbody id="table-body"></tbody>
-                </table>
+        <div id="main-content" style="display: none;">
+            <!-- Row 1: Status and Stats Tables -->
+            <div class="dashboard-grid">
+                <div>
+                    <div class="section-title">Weekly Status (Individual Sheets)</div>
+                    <table id="status-table">
+                        <thead>
+                            <tr>
+                                <th>Officer Name</th>
+                                <th>Status</th>
+                                <th>Incomplete Tasks</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-body"></tbody>
+                    </table>
+                </div>
+                <div>
+                    <div class="section-title">Task Statistics (Aggregate Data)</div>
+                    <table id="stats-table">
+                        <thead>
+                            <tr>
+                                <th>Officer Name</th>
+                                <th>Completed (Last 7 Days)</th>
+                                <th>Total Pending</th>
+                            </tr>
+                        </thead>
+                        <tbody id="stats-body"></tbody>
+                    </table>
+                </div>
             </div>
-            <div>
-                <div class="section-title">Task Statistics (Aggregate Data)</div>
-                <table id="stats-table">
-                    <thead>
-                        <tr>
-                            <th>Officer Name</th>
-                            <th>Completed (Last 7 Days)</th>
-                            <th>Total Pending</th>
-                        </tr>
-                    </thead>
-                    <tbody id="stats-body"></tbody>
-                </table>
-            </div>
-        </div>
 
-        <div class="chart-container" id="chart-section" style="display: none;">
-            <div class="section-title">Weekly Incomplete Tasks (From Individual Sheets)</div>
-            <canvas id="pendingChart"></canvas>
+            <!-- Row 2: Project Management Overview (New Feature) -->
+            <div class="full-width-section">
+                <div class="section-title">Project Management Overview</div>
+                <div class="project-grid">
+                    <!-- Left Column: Status and Progress -->
+                    <div class="sub-grid">
+                        <div>
+                            <div class="section-title" style="font-size: 1em;">Table 1: Overall Project Status</div>
+                            <table id="proj-status-table">
+                                <thead>
+                                    <tr>
+                                        <th>Status</th>
+                                        <th>Project Count</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="proj-status-body"></tbody>
+                            </table>
+                        </div>
+                        <div>
+                            <div class="section-title" style="font-size: 1em;">Table 2: Physical Progress Distribution</div>
+                            <table id="proj-progress-table">
+                                <thead>
+                                    <tr>
+                                        <th>Progress Range</th>
+                                        <th>Number of Projects</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="proj-progress-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <!-- Right Column: Dept Summary -->
+                    <div>
+                        <div class="section-title" style="font-size: 1em;">Table 3: Department / Funds Summary</div>
+                        <table id="proj-dept-table">
+                            <thead>
+                                <tr>
+                                    <th>Dept</th>
+                                    <th>Total Projects</th>
+                                    <th>Avg % Completion</th>
+                                    <th>Funds Recvd (Lakhs)</th>
+                                    <th>Funds Spent (Lakhs)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="proj-dept-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Row 3: Court Cases -->
+            <div class="full-width-section">
+                <div class="section-title">Upcoming Court Cases (Next 14 Days)</div>
+                <div id="court-cases-container">
+                    <table id="court-cases-table" style="display: none;">
+                        <thead>
+                            <tr>
+                                <th>Supervisor Office</th>
+                                <th>Case No.</th>
+                                <th>Next Hearing Date</th>
+                            </tr>
+                        </thead>
+                        <tbody id="court-cases-body"></tbody>
+                    </table>
+                    <div id="no-cases-msg" class="no-data" style="display: none;">No upcoming cases within 14 days.</div>
+                </div>
+            </div>
+
+            <!-- Row 4: Chart -->
+            <div class="chart-container" id="chart-section">
+                <div class="section-title">Weekly Incomplete Tasks (From Individual Sheets)</div>
+                <canvas id="pendingChart"></canvas>
+            </div>
         </div>
 
         <button class="refresh-btn" onclick="refreshData()">Refresh Data</button>
@@ -103,8 +167,12 @@
 
     <script>
         const SPREADSHEET_ID = '1jspebqSTXgEtYyxYAE47_uRn6RQKFlHQhneuQoGiCok'; // Main sheet with officers
-        const AGGREGATE_SHEET_ID = '14-idXJHzHKCUQxxaqGZi-6S0G20gvPUhK4G16ci2FwI'; // New sheet
+        const AGGREGATE_SHEET_ID = '14-idXJHzHKCUQxxaqGZi-6S0G20gvPUhK4G16ci2FwI'; // Stats sheet
         const AGGREGATE_GID = '213021534';
+        const COURT_SHEET_ID = '1VUnD7ySFzIkeZlaq8E5XG8r2xXcos6lhIt62QZEeHKs'; // Court cases
+        const COURT_GID = '0';
+        const PROJECT_SHEET_ID = '11mKnJQOSZ6WJApYRaYtJ91gQmMivoIEs0LPcmBw91Kg'; // Project sheet
+        const PROJECT_GID = '1130720003';
 
         const OFFICERS = [
             { name: "ADC (G)", gid: "174981592" },
@@ -240,16 +308,115 @@
             }));
         }
 
+        function processCourtData(data) {
+            if (!data || !data.table) return [];
+            const rows = data.table.rows;
+            const upcomingCases = [];
+            const now = new Date();
+            now.setHours(0,0,0,0);
+            const next14Days = new Date();
+            next14Days.setDate(now.getDate() + 14);
+            next14Days.setHours(23,59,59,999);
+
+            for (const row of rows) {
+                if (!row.c) continue;
+                const officeCell = row.c[1];
+                const caseNoCell = row.c[4];
+                const dateCell = row.c[14];
+                if (!dateCell || !dateCell.v) continue;
+
+                let hearingDate = null;
+                const dateStr = String(dateCell.v);
+                const match = dateStr.match(/Date\((\d+),(\d+),(\d+)\)/);
+                if (match) {
+                    hearingDate = new Date(parseInt(match[1]), parseInt(match[2]), parseInt(match[3]));
+                }
+                if (hearingDate) {
+                    if (hearingDate >= now && hearingDate <= next14Days) {
+                        upcomingCases.push({
+                            office: officeCell ? String(officeCell.v) : '-',
+                            caseNo: caseNoCell ? String(caseNoCell.v) : '-',
+                            date: hearingDate
+                        });
+                    }
+                }
+            }
+            upcomingCases.sort((a, b) => a.date - b.date);
+            return upcomingCases;
+        }
+
+        function processProjectData(data) {
+            if (!data || !data.table) return { statusCounts: [], progressCounts: [], deptStats: [] };
+            const rows = data.table.rows;
+
+            // Stats Aggregation
+            const statusMap = {};
+            const progressBuckets = { "0–20%": 0, "20–40%": 0, "40–60%": 0, "60–80%": 0, "80–100%": 0 };
+            const deptMap = {};
+
+            for (const row of rows) {
+                if (!row.c) continue;
+
+                // Index 2: Dept
+                // Index 7: Status
+                // Index 9: % Progress (0.0 - 1.0)
+                // Index 10: Funds Recvd
+                // Index 11: Expenditure
+
+                const deptCell = row.c[2];
+                const statusCell = row.c[7];
+                const progressCell = row.c[9];
+                const fundsRecvdCell = row.c[10];
+                const expCell = row.c[11];
+
+                // Status
+                const status = statusCell && statusCell.v ? String(statusCell.v).trim() : 'Unknown';
+                if (!statusMap[status]) statusMap[status] = 0;
+                statusMap[status]++;
+
+                // Progress
+                const progressVal = progressCell && progressCell.v !== null ? parseFloat(progressCell.v) : 0;
+                const percent = progressVal * 100;
+                if (percent <= 20) progressBuckets["0–20%"]++;
+                else if (percent <= 40) progressBuckets["20–40%"]++;
+                else if (percent <= 60) progressBuckets["40–60%"]++;
+                else if (percent <= 80) progressBuckets["60–80%"]++;
+                else progressBuckets["80–100%"]++;
+
+                // Dept
+                const dept = deptCell && deptCell.v ? String(deptCell.v).trim() : 'Unspecified';
+                if (!deptMap[dept]) {
+                    deptMap[dept] = { count: 0, totalProgress: 0, fundsRecvd: 0, fundsSpent: 0 };
+                }
+                deptMap[dept].count++;
+                deptMap[dept].totalProgress += percent;
+                deptMap[dept].fundsRecvd += (fundsRecvdCell && fundsRecvdCell.v ? parseFloat(fundsRecvdCell.v) : 0);
+                deptMap[dept].fundsSpent += (expCell && expCell.v ? parseFloat(expCell.v) : 0);
+            }
+
+            // Transform for Output
+            const statusCounts = Object.keys(statusMap).map(k => ({ status: k, count: statusMap[k] }));
+            // Define order for progress?
+            const progressCounts = Object.keys(progressBuckets).map(k => ({ range: k, count: progressBuckets[k] }));
+            const deptStats = Object.keys(deptMap).map(k => ({
+                dept: k,
+                count: deptMap[k].count,
+                avgProgress: deptMap[k].totalProgress / deptMap[k].count,
+                fundsRecvd: deptMap[k].fundsRecvd,
+                fundsSpent: deptMap[k].fundsSpent
+            }));
+
+            return { statusCounts, progressCounts, deptStats };
+        }
+
         async function refreshData() {
             const loading = document.getElementById('loading');
             const mainContent = document.getElementById('main-content');
-            const chartSection = document.getElementById('chart-section');
             
             loading.style.display = 'block';
             mainContent.style.display = 'none';
-            chartSection.style.display = 'none';
 
-            // 1. Fetch Officer Statuses (Left Table)
+            // 1. Fetch Officer Statuses
             const officerPromises = OFFICERS.map(async (officer) => {
                 const data = await fetchGvizData(SPREADSHEET_ID, officer.gid);
                 let result = { status: 'Error', count: 0 };
@@ -259,20 +426,27 @@
                 return { name: officer.name, status: result.status, count: result.count };
             });
 
-            // 2. Fetch Aggregate Data (Right Table)
+            // 2. Fetch Aggregate Data
             const aggregatePromise = fetchGvizData(AGGREGATE_SHEET_ID, AGGREGATE_GID);
 
-            const [officerResults, aggregateData] = await Promise.all([
+            // 3. Fetch Court Cases
+            const courtPromise = fetchGvizData(COURT_SHEET_ID, COURT_GID);
+
+            // 4. Fetch Project Data
+            const projectPromise = fetchGvizData(PROJECT_SHEET_ID, PROJECT_GID);
+
+            const [officerResults, aggregateData, courtData, projectData] = await Promise.all([
                 Promise.all(officerPromises),
-                aggregatePromise
+                aggregatePromise,
+                courtPromise,
+                projectPromise
             ]);
 
-            // Render Officer Table (Left)
+            // Render Officer Table
             const statusTableBody = document.getElementById('table-body');
             statusTableBody.innerHTML = '';
             let totalCompleted = 0;
             let totalIncomplete = 0;
-
             officerResults.forEach(res => {
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
@@ -281,21 +455,18 @@
                     <td style="${res.count > 0 ? 'color: #c0392b; font-weight: bold;' : 'color: #27ae60;'}">${res.count >= 0 ? res.count : '-'}</td>
                 `;
                 statusTableBody.appendChild(tr);
-
                 if (res.status === 'Completed') totalCompleted++;
                 if (res.status === 'Incomplete') totalIncomplete++;
             });
-
             document.getElementById('count-completed').innerText = totalCompleted;
             document.getElementById('count-incomplete').innerText = totalIncomplete;
             document.getElementById('count-total').innerText = OFFICERS.length;
 
-            // Render Aggregate Table (Right)
+            // Render Aggregate Table
             const statsTableBody = document.getElementById('stats-body');
             statsTableBody.innerHTML = '';
             const stats = processAggregateData(aggregateData);
             stats.sort((a, b) => b.pending - a.pending);
-
             stats.forEach(stat => {
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
@@ -306,15 +477,72 @@
                 statsTableBody.appendChild(tr);
             });
 
-            // Render Chart - USING OFFICER RESULTS (Individual Sheets)
-            // Filter to show only officers with pending tasks for better visibility, or all?
-            // Let's show all to be consistent.
+            // Render Project Management Tables
+            const projStats = processProjectData(projectData);
+            
+            // Table 1
+            const projStatusBody = document.getElementById('proj-status-body');
+            projStatusBody.innerHTML = '';
+            projStats.statusCounts.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td>${item.status}</td><td>${item.count}</td>`;
+                projStatusBody.appendChild(tr);
+            });
+
+            // Table 2
+            const projProgressBody = document.getElementById('proj-progress-body');
+            projProgressBody.innerHTML = '';
+            projStats.progressCounts.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td>${item.range}</td><td>${item.count}</td>`;
+                projProgressBody.appendChild(tr);
+            });
+
+            // Table 3
+            const projDeptBody = document.getElementById('proj-dept-body');
+            projDeptBody.innerHTML = '';
+            projStats.deptStats.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${item.dept}</td>
+                    <td>${item.count}</td>
+                    <td>${item.avgProgress.toFixed(1)}%</td>
+                    <td>${item.fundsRecvd.toFixed(2)}</td>
+                    <td>${item.fundsSpent.toFixed(2)}</td>
+                `;
+                projDeptBody.appendChild(tr);
+            });
+
+
+            // Render Court Cases
+            const courtTableBody = document.getElementById('court-cases-body');
+            const courtTable = document.getElementById('court-cases-table');
+            const noCasesMsg = document.getElementById('no-cases-msg');
+            courtTableBody.innerHTML = '';
+            const upcomingCases = processCourtData(courtData);
+            if (upcomingCases.length > 0) {
+                courtTable.style.display = 'table';
+                noCasesMsg.style.display = 'none';
+                upcomingCases.forEach(c => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${c.office}</td>
+                        <td>${c.caseNo}</td>
+                        <td>${c.date.toLocaleDateString()}</td>
+                    `;
+                    courtTableBody.appendChild(tr);
+                });
+            } else {
+                courtTable.style.display = 'none';
+                noCasesMsg.style.display = 'block';
+            }
+
+            // Render Chart
             renderChart(officerResults);
 
             // Show UI
             loading.style.display = 'none';
-            mainContent.style.display = 'grid';
-            chartSection.style.display = 'block';
+            mainContent.style.display = 'block';
             document.getElementById('last-updated').innerText = 'Last Updated: ' + new Date().toLocaleString();
         }
 
@@ -325,9 +553,8 @@
                 pendingChartInstance.destroy();
             }
 
-            // Use the data from individual sheets
             const labels = officerData.map(o => o.name);
-            const data = officerData.map(o => Math.max(0, o.count)); // Ensure no -1s
+            const data = officerData.map(o => Math.max(0, o.count));
 
             pendingChartInstance = new Chart(ctx, {
                 type: 'bar',
@@ -348,7 +575,7 @@
                         y: {
                             beginAtZero: true,
                             stepSize: 1,
-                            suggestedMax: 5 // Ensure small numbers look okay
+                            suggestedMax: 5
                         }
                     }
                 }
