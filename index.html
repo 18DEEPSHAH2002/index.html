@@ -66,6 +66,7 @@
                 <tr>
                     <th>Officer Name</th>
                     <th>Status</th>
+                    <th>No. of Incomplete Tasks</th>
                 </tr>
             </thead>
             <tbody id="table-body">
@@ -135,7 +136,7 @@
         }
 
         function analyzeData(data) {
-            if (!data || !data.table) return 'Error';
+            if (!data || !data.table) return { status: 'Error', count: -1 };
 
             const cols = data.table.cols;
             const rows = data.table.rows;
@@ -146,15 +147,14 @@
                 if (cols[i].label && cols[i].label.trim().toLowerCase() === 'status') {
                     statusIdx = i;
                     // We continue searching to find the LAST column with name "Status"
-                    // This ensures we get the latest week if new weeks are appended to the right.
                 }
             }
 
             if (statusIdx === -1) {
-                return 'Structure Error'; 
+                return { status: 'Structure Error', count: -1 }; 
             }
 
-            let isIncomplete = false;
+            let incompleteCount = 0;
             
             for (const row of rows) {
                 if (!row.c) continue;
@@ -163,13 +163,13 @@
                     const val = String(cell.v).toLowerCase();
                     // Check for 'pending' or 'incomplete'
                     if (val.includes('pending') || val.includes('incomplete')) {
-                        isIncomplete = true;
-                        break;
+                        incompleteCount++;
                     }
                 }
             }
 
-            return isIncomplete ? 'Incomplete' : 'Completed';
+            const status = incompleteCount > 0 ? 'Incomplete' : 'Completed';
+            return { status: status, count: incompleteCount };
         }
 
         let currentFetchId = 0;
@@ -196,20 +196,20 @@
             // Use Promise.all to fetch concurrently
             const promises = OFFICERS.map(async (officer) => {
                 const data = await fetchSheetData(officer.gid);
-                let status = 'Error';
+                let result = { status: 'Error', count: 0 };
                 if (data) {
                     if (data.status === 'error') {
-                        status = 'Sheet Error';
+                        result.status = 'Sheet Error';
                         if (data.errors && data.errors.length > 0) {
                              console.error(`Sheet Error for ${officer.name}:`, data.errors);
                         }
                     } else {
-                        status = analyzeData(data);
+                        result = analyzeData(data);
                     }
                 } else {
-                    status = 'Fetch Error';
+                    result.status = 'Fetch Error';
                 }
-                return { name: officer.name, status: status };
+                return { name: officer.name, status: result.status, count: result.count };
             });
 
             const officerResults = await Promise.all(promises);
@@ -244,10 +244,25 @@
                     badge.classList.add('badge-error');
                     badge.textContent = res.status;
                 }
-
                 statusTd.appendChild(badge);
+                
+                const countTd = document.createElement('td');
+                if (res.count >= 0) {
+                     countTd.textContent = res.count;
+                     if (res.count > 0) {
+                         countTd.style.fontWeight = 'bold';
+                         countTd.style.color = '#c0392b';
+                     } else {
+                         countTd.style.color = '#27ae60';
+                     }
+                } else {
+                    countTd.textContent = '-';
+                }
+
                 tr.appendChild(nameTd);
                 tr.appendChild(statusTd);
+                tr.appendChild(countTd);
+
                 tableBody.appendChild(tr);
             });
 
