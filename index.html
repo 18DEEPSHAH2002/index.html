@@ -49,34 +49,64 @@
         
         .full-width-section { margin-bottom: 30px; }
         .no-data { text-align: center; padding: 20px; color: #7f8c8d; font-style: italic; background: #f8f9fa; border-radius: 8px; }
+
+        /* Login Overlay Styles */
+        #login-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(44, 62, 80, 0.95);
+            z-index: 10000;
+            display: flex; justify-content: center; align-items: center;
+        }
+        .login-box {
+            background: white; padding: 40px; border-radius: 8px; box-shadow: 0 5px 20px rgba(0,0,0,0.3); text-align: center; width: 300px;
+        }
+        .login-box input {
+            width: 100%; padding: 10px; margin: 15px 0; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; font-size: 1em;
+        }
+        .login-box button {
+            width: 100%; padding: 10px; background-color: #3498db; color: white; border: none; border-radius: 4px; font-size: 1em; cursor: pointer;
+        }
+        .login-box button:hover { background-color: #2980b9; }
+        .error-msg { color: #e74c3c; margin-top: 10px; font-size: 0.9em; display: none; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>DC TRACKING Dashboard</h1>
+    <!-- Login Overlay -->
+    <div id="login-overlay">
+        <div class="login-box">
+            <h2>Dashboard Login</h2>
+            <p>Please enter password to access</p>
+            <input type="password" id="password-input" placeholder="Enter Password" onkeypress="handleEnter(event)">
+            <button onclick="checkPassword()">Submit</button>
+            <div id="login-error" class="error-msg">Incorrect Password</div>
+        </div>
+    </div>
+
+    <div class="container" style="display:none;" id="main-container">
+        <h1>Officer Task Status Dashboard</h1>
         
         <div class="summary-cards">
             <div class="card bg-green">
-                <h3>Officers weekly(saturday sheet) Completed</h3>
+                <h3>Officers Completed</h3>
                 <p id="count-completed">-</p>
             </div>
             <div class="card bg-red">
-                <h3>Officers weekly(saturday sheet) Incomplete</h3>
+                <h3>Officers Incomplete</h3>
                 <p id="count-incomplete">-</p>
             </div>
             <div class="card bg-blue">
-                <h3>Total Officers weekly(saturday sheet)</h3>
+                <h3>Total Officers</h3>
                 <p id="count-total">-</p>
             </div>
         </div>
 
-        <div id="loading" class="loading-text">Fetching data from Google Sheets...</div>
+        <div id="loading" class="loading-text" style="display:none;">Fetching data from Google Sheets...</div>
         
         <div id="main-content" style="display: none;">
             <!-- Row 1: Status and Stats Tables -->
             <div class="dashboard-grid">
                 <div>
-                    <div class="section-title">Weekly (saturday sheet)</div>
+                    <div class="section-title">Weekly Status (Individual Sheets)</div>
                     <table id="status-table">
                         <thead>
                             <tr>
@@ -89,7 +119,7 @@
                     </table>
                 </div>
                 <div>
-                    <div class="section-title">Star mark sheet</div>
+                    <div class="section-title">Task Statistics (Aggregate Data)</div>
                     <table id="stats-table">
                         <thead>
                             <tr>
@@ -105,7 +135,7 @@
 
             <!-- Row 2: Project Management Overview (New Feature) -->
             <div class="full-width-section">
-                <div class="section-title">Infra projects</div>
+                <div class="section-title">Project Management Overview</div>
                 <div class="project-grid">
                     <!-- Left Column: Status and Progress -->
                     <div class="sub-grid">
@@ -173,7 +203,7 @@
 
             <!-- Row 4: Chart -->
             <div class="chart-container" id="chart-section">
-                <div class="section-title">weekly(saturday sheet) chart</div>
+                <div class="section-title">Weekly Incomplete Tasks (From Individual Sheets)</div>
                 <canvas id="pendingChart"></canvas>
             </div>
         </div>
@@ -211,6 +241,28 @@
         ];
 
         let pendingChartInstance = null;
+
+        // --- AUTH LOGIC ---
+        function checkPassword() {
+            const input = document.getElementById('password-input').value;
+            const errorMsg = document.getElementById('login-error');
+            const overlay = document.getElementById('login-overlay');
+            const mainContainer = document.getElementById('main-container');
+
+            if (input === '1991') {
+                overlay.style.display = 'none';
+                mainContainer.style.display = 'block'; // Show container
+                refreshData(); // Start fetching data
+            } else {
+                errorMsg.style.display = 'block';
+            }
+        }
+
+        function handleEnter(e) {
+            if (e.key === 'Enter') checkPassword();
+        }
+        // ------------------
+
 
         // Generic fetcher for GVIZ
         function fetchGvizData(sheetId, gid) {
@@ -598,10 +650,9 @@
                 }
             });
         }
-
-        refreshData();
+        
+        // Remove automatic refreshData call; it's now called by checkPassword()
+        // refreshData(); 
     </script>
 </body>
 </html>
-
-
