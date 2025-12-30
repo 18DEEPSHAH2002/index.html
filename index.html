@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Officer Task Status Dashboard</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; background-color: #f4f6f8; color: #333; }
+        .container { max-width: 1000px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+        h1 { text-align: center; color: #2c3e50; margin-bottom: 30px; }
+        
+        .summary-cards { display: flex; justify-content: center; gap: 20px; margin-bottom: 30px; flex-wrap: wrap; }
+        .card { padding: 20px; border-radius: 8px; color: white; width: 200px; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .card h3 { margin: 0; font-size: 1.1em; opacity: 0.9; }
+        .card p { margin: 10px 0 0; font-size: 2.5em; font-weight: bold; }
+        .bg-green { background-color: #2ecc71; }
+        .bg-red { background-color: #e74c3c; }
+        .bg-blue { background-color: #3498db; }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; border-radius: 8px; overflow: hidden; box-shadow: 0 0 10px rgba(0,0,0,0.05); }
+        th, td { padding: 15px 20px; text-align: left; border-bottom: 1px solid #eee; }
+        th { background-color: #34495e; color: white; font-weight: 600; text-transform: uppercase; font-size: 0.9em; letter-spacing: 0.5px; }
+        tr:last-child td { border-bottom: none; }
+        tr:hover { background-color: #f8f9fa; }
+        
+        .badge { padding: 6px 12px; border-radius: 20px; font-weight: 600; font-size: 0.9em; display: inline-block; }
+        .badge-completed { background-color: #d5f5e3; color: #27ae60; }
+        .badge-incomplete { background-color: #fadbd8; color: #c0392b; }
+        .badge-loading { background-color: #eaecee; color: #7f8c8d; }
+        .badge-error { background-color: #fcf3cf; color: #f39c12; }
+
+        .loading-text { text-align: center; color: #7f8c8d; margin: 20px; font-style: italic; }
+        .refresh-btn { display: block; margin: 20px auto 0; padding: 10px 20px; background-color: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 1em; transition: background 0.3s; }
+        .refresh-btn:hover { background-color: #2980b9; }
+        .timestamp { text-align: right; color: #95a5a6; font-size: 0.85em; margin-top: 15px; }
+
+        @media (max-width: 600px) {
+            .summary-cards { flex-direction: column; align-items: center; }
+            .card { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Officer Task Status Dashboard</h1>
+        
+        <div class="summary-cards">
+            <div class="card bg-green">
+                <h3>Completed</h3>
+                <p id="count-completed">-</p>
+            </div>
+            <div class="card bg-red">
+                <h3>Incomplete</h3>
+                <p id="count-incomplete">-</p>
+            </div>
+            <div class="card bg-blue">
+                <h3>Total</h3>
+                <p id="count-total">-</p>
+            </div>
+        </div>
+
+        <div id="loading" class="loading-text">Fetching data from Google Sheets...</div>
+        
+        <table id="status-table" style="display: none;">
+            <thead>
+                <tr>
+                    <th>Officer Name</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody id="table-body">
+                <!-- Rows will be inserted here -->
+            </tbody>
+        </table>
+
+        <button class="refresh-btn" onclick="fetchData()">Refresh Data</button>
+        <div class="timestamp" id="last-updated"></div>
+    </div>
+
+    <script>
+        const SPREADSHEET_ID = '1jspebqSTXgEtYyxYAE47_uRn6RQKFlHQhneuQoGiCok';
+        
+        const OFFICERS = [
+            { name: "ADC (G)", gid: "174981592" },
+            { name: "ADC (D)", gid: "537074213" },
+            { name: "ADC (UD)", gid: "846764018" },
+            { name: "ADC K", gid: "1476602908" },
+            { name: "ADC J", gid: "18822170" },
+            { name: "ACG", gid: "1291568180" },
+            { name: "CMFO", gid: "1227420096" },
+            { name: "SDM East", gid: "33416154" },
+            { name: "SDM West", gid: "52989510" },
+            { name: "SDM Raikot", gid: "1833732603" },
+            { name: "SDM Samrala", gid: "190794459" },
+            { name: "SDM Khanna", gid: "2054147547" },
+            { name: "SDM Jargon", gid: "278920499" },
+            { name: "SDM Payal", gid: "778489712" },
+            { name: "DRO", gid: "501565659" },
+            { name: "RTA", gid: "1563439729" }
+        ];
+
+        async function fetchSheetData(gid) {
+            const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:json&gid=${gid}`;
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const text = await response.text();
+                
+                // Parse JSON from the JSONP-like response
+                // Response format: /*O_o*/\n google.visualization.Query.setResponse({...});
+                const jsonText = text.substring(text.indexOf("(") + 1, text.lastIndexOf(")"));
+                const data = JSON.parse(jsonText);
+                return data;
+            } catch (error) {
+                console.error(`Error fetching GID ${gid}:`, error);
+                return null;
+            }
+        }
+
+        function analyzeData(data) {
+            if (!data || !data.table) return 'Error';
+
+            const cols = data.table.cols;
+            const rows = data.table.rows;
+
+            // Find Status column index
+            let statusIdx = -1;
+            for (let i = 0; i < cols.length; i++) {
+                if (cols[i].label && cols[i].label.trim().toLowerCase() === 'status') {
+                    statusIdx = i;
+                    break;
+                }
+            }
+
+            if (statusIdx === -1) {
+                // Try searching in the first few rows if headers are not in cols definition properly
+                // Sometimes gviz puts headers in the first row of data
+                // But usually cols.label is correct if the sheet is structured well.
+                // In our test, "Status" was in cols id "G".
+                // If not found, default to column G (index 6) or H?
+                // Based on image and CSV, Status is usually around column G.
+                // But let's assume if we can't find "Status", it's an error or we check common indices.
+                return 'Structure Error'; 
+            }
+
+            let isIncomplete = false;
+            
+            for (const row of rows) {
+                if (!row.c) continue;
+                const cell = row.c[statusIdx];
+                if (cell && cell.v) {
+                    const val = String(cell.v).toLowerCase();
+                    if (val.includes('pending')) {
+                        isIncomplete = true;
+                        break;
+                    }
+                }
+            }
+
+            return isIncomplete ? 'Incomplete' : 'Completed';
+        }
+
+        async function fetchData() {
+            const tableBody = document.getElementById('table-body');
+            const loading = document.getElementById('loading');
+            const table = document.getElementById('status-table');
+            
+            // Reset UI
+            tableBody.innerHTML = '';
+            table.style.display = 'none';
+            loading.style.display = 'block';
+            document.getElementById('count-completed').innerText = '-';
+            document.getElementById('count-incomplete').innerText = '-';
+            document.getElementById('count-total').innerText = OFFICERS.length;
+
+            let completedCount = 0;
+            let incompleteCount = 0;
+            const results = [];
+
+            // We can fetch in parallel
+            const promises = OFFICERS.map(async (officer) => {
+                const data = await fetchSheetData(officer.gid);
+                let status = 'Error';
+                if (data) {
+                    status = analyzeData(data);
+                } else {
+                    // Fallback or retry?
+                    status = 'Fetch Error';
+                }
+                return { name: officer.name, status: status };
+            });
+
+            const officerResults = await Promise.all(promises);
+
+            // Sort results to match original order (Promise.all preserves order, but good to be sure)
+            // Actually Promise.all preserves order of input array.
+
+            officerResults.forEach(res => {
+                const tr = document.createElement('tr');
+                const nameTd = document.createElement('td');
+                nameTd.textContent = res.name;
+                
+                const statusTd = document.createElement('td');
+                const badge = document.createElement('span');
+                badge.className = 'badge';
+                
+                if (res.status === 'Completed') {
+                    badge.classList.add('badge-completed');
+                    badge.textContent = 'Completed';
+                    completedCount++;
+                } else if (res.status === 'Incomplete') {
+                    badge.classList.add('badge-incomplete');
+                    badge.textContent = 'Incomplete';
+                    incompleteCount++;
+                } else {
+                    badge.classList.add('badge-error');
+                    badge.textContent = res.status;
+                    // Count error as incomplete? User said "IF ANY ONE ... IS INCOMPLETE ... TAKE STATUS AS INCOMPLETE".
+                    // But error is unknown. Let's not count as completed.
+                }
+
+                statusTd.appendChild(badge);
+                tr.appendChild(nameTd);
+                tr.appendChild(statusTd);
+                tableBody.appendChild(tr);
+            });
+
+            document.getElementById('count-completed').innerText = completedCount;
+            document.getElementById('count-incomplete').innerText = incompleteCount;
+            // Total might differ if errors, but usually total is fixed.
+            
+            loading.style.display = 'none';
+            table.style.display = 'table';
+            
+            const now = new Date();
+            document.getElementById('last-updated').innerText = 'Last Updated: ' + now.toLocaleString();
+        }
+
+        // Initialize
+        fetchData();
+    </script>
+</body>
+</html>
