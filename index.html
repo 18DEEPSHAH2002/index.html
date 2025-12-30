@@ -4,9 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Officer Task Status Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; background-color: #f4f6f8; color: #333; }
-        .container { max-width: 1000px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+        .container { max-width: 1400px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
         h1 { text-align: center; color: #2c3e50; margin-bottom: 30px; }
         
         .summary-cards { display: flex; justify-content: center; gap: 20px; margin-bottom: 30px; flex-wrap: wrap; }
@@ -17,16 +18,20 @@
         .bg-red { background-color: #e74c3c; }
         .bg-blue { background-color: #3498db; }
 
+        .dashboard-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 30px; }
+        @media (max-width: 1100px) { .dashboard-grid { grid-template-columns: 1fr; } }
+
+        .section-title { font-size: 1.2em; font-weight: 600; color: #34495e; margin-bottom: 15px; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+
         table { width: 100%; border-collapse: collapse; margin-top: 10px; border-radius: 8px; overflow: hidden; box-shadow: 0 0 10px rgba(0,0,0,0.05); }
-        th, td { padding: 15px 20px; text-align: left; border-bottom: 1px solid #eee; }
-        th { background-color: #34495e; color: white; font-weight: 600; text-transform: uppercase; font-size: 0.9em; letter-spacing: 0.5px; }
+        th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #eee; font-size: 0.95em; }
+        th { background-color: #34495e; color: white; font-weight: 600; text-transform: uppercase; font-size: 0.85em; letter-spacing: 0.5px; }
         tr:last-child td { border-bottom: none; }
         tr:hover { background-color: #f8f9fa; }
         
-        .badge { padding: 6px 12px; border-radius: 20px; font-weight: 600; font-size: 0.9em; display: inline-block; }
+        .badge { padding: 5px 10px; border-radius: 20px; font-weight: 600; font-size: 0.85em; display: inline-block; }
         .badge-completed { background-color: #d5f5e3; color: #27ae60; }
         .badge-incomplete { background-color: #fadbd8; color: #c0392b; }
-        .badge-loading { background-color: #eaecee; color: #7f8c8d; }
         .badge-error { background-color: #fcf3cf; color: #f39c12; }
 
         .loading-text { text-align: center; color: #7f8c8d; margin: 20px; font-style: italic; }
@@ -34,10 +39,7 @@
         .refresh-btn:hover { background-color: #2980b9; }
         .timestamp { text-align: right; color: #95a5a6; font-size: 0.85em; margin-top: 15px; }
 
-        @media (max-width: 600px) {
-            .summary-cards { flex-direction: column; align-items: center; }
-            .card { width: 100%; }
-        }
+        .chart-container { position: relative; height: 400px; width: 100%; margin-top: 40px; }
     </style>
 </head>
 <body>
@@ -46,41 +48,64 @@
         
         <div class="summary-cards">
             <div class="card bg-green">
-                <h3>Completed</h3>
+                <h3>Officers Completed</h3>
                 <p id="count-completed">-</p>
             </div>
             <div class="card bg-red">
-                <h3>Incomplete</h3>
+                <h3>Officers Incomplete</h3>
                 <p id="count-incomplete">-</p>
             </div>
             <div class="card bg-blue">
-                <h3>Total</h3>
+                <h3>Total Officers</h3>
                 <p id="count-total">-</p>
             </div>
         </div>
 
         <div id="loading" class="loading-text">Fetching data from Google Sheets...</div>
         
-        <table id="status-table" style="display: none;">
-            <thead>
-                <tr>
-                    <th>Officer Name</th>
-                    <th>Status</th>
-                    <th>No. of Incomplete Tasks</th>
-                </tr>
-            </thead>
-            <tbody id="table-body">
-                <!-- Rows will be inserted here -->
-            </tbody>
-        </table>
+        <div class="dashboard-grid" id="main-content" style="display: none;">
+            <div>
+                <div class="section-title">Weekly Status (Individual Sheets)</div>
+                <table id="status-table">
+                    <thead>
+                        <tr>
+                            <th>Officer Name</th>
+                            <th>Status</th>
+                            <th>Incomplete Tasks</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body"></tbody>
+                </table>
+            </div>
+            <div>
+                <div class="section-title">Task Statistics (Aggregate Data)</div>
+                <table id="stats-table">
+                    <thead>
+                        <tr>
+                            <th>Officer Name</th>
+                            <th>Completed (Last 7 Days)</th>
+                            <th>Total Pending</th>
+                        </tr>
+                    </thead>
+                    <tbody id="stats-body"></tbody>
+                </table>
+            </div>
+        </div>
 
-        <button class="refresh-btn" onclick="fetchData()">Refresh Data</button>
+        <div class="chart-container" id="chart-section" style="display: none;">
+            <div class="section-title">Weekly Incomplete Tasks (From Individual Sheets)</div>
+            <canvas id="pendingChart"></canvas>
+        </div>
+
+        <button class="refresh-btn" onclick="refreshData()">Refresh Data</button>
         <div class="timestamp" id="last-updated"></div>
     </div>
 
     <script>
-        const SPREADSHEET_ID = '1jspebqSTXgEtYyxYAE47_uRn6RQKFlHQhneuQoGiCok';
-        
+        const SPREADSHEET_ID = '1jspebqSTXgEtYyxYAE47_uRn6RQKFlHQhneuQoGiCok'; // Main sheet with officers
+        const AGGREGATE_SHEET_ID = '14-idXJHzHKCUQxxaqGZi-6S0G20gvPUhK4G16ci2FwI'; // New sheet
+        const AGGREGATE_GID = '213021534';
+
         const OFFICERS = [
             { name: "ADC (G)", gid: "174981592" },
             { name: "ADC (D)", gid: "537074213" },
@@ -100,15 +125,18 @@
             { name: "RTA", gid: "1563439729" }
         ];
 
-        function fetchSheetData(gid) {
-            return new Promise((resolve, reject) => {
+        let pendingChartInstance = null;
+
+        // Generic fetcher for GVIZ
+        function fetchGvizData(sheetId, gid) {
+            return new Promise((resolve) => {
                 const callbackName = 'callback_' + gid + '_' + Math.floor(Math.random() * 100000);
                 
                 const timeout = setTimeout(() => {
                     cleanup();
                     console.error(`Timeout fetching GID ${gid}`);
                     resolve(null); 
-                }, 15000); // 15 seconds timeout
+                }, 15000);
 
                 window[callbackName] = (data) => {
                     cleanup();
@@ -116,15 +144,12 @@
                 };
 
                 const script = document.createElement('script');
-                // Use JSONP via responseHandler. tqx=responseHandler:callbackName
-                // Also add &_ to prevent caching
-                script.src = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=responseHandler:${callbackName}&gid=${gid}&_=${Date.now()}`;
+                script.src = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=responseHandler:${callbackName}&gid=${gid}&_=${Date.now()}`;
                 script.onerror = () => {
                     cleanup();
                     console.error(`Script error fetching GID ${gid}`);
                     resolve(null);
                 };
-                
                 document.body.appendChild(script);
 
                 function cleanup() {
@@ -135,149 +160,202 @@
             });
         }
 
-        function analyzeData(data) {
+        function analyzeOfficerData(data) {
             if (!data || !data.table) return { status: 'Error', count: -1 };
-
             const cols = data.table.cols;
             const rows = data.table.rows;
 
-            // Find Status column index
+            // Find last column with name "Status"
             let statusIdx = -1;
             for (let i = 0; i < cols.length; i++) {
                 if (cols[i].label && cols[i].label.trim().toLowerCase() === 'status') {
                     statusIdx = i;
-                    // We continue searching to find the LAST column with name "Status"
                 }
             }
 
-            if (statusIdx === -1) {
-                return { status: 'Structure Error', count: -1 }; 
-            }
+            if (statusIdx === -1) return { status: 'Structure Error', count: -1 };
 
             let incompleteCount = 0;
-            
             for (const row of rows) {
                 if (!row.c) continue;
                 const cell = row.c[statusIdx];
                 if (cell && cell.v) {
                     const val = String(cell.v).toLowerCase();
-                    // Check for 'pending' or 'incomplete'
                     if (val.includes('pending') || val.includes('incomplete')) {
                         incompleteCount++;
                     }
                 }
             }
-
-            const status = incompleteCount > 0 ? 'Incomplete' : 'Completed';
-            return { status: status, count: incompleteCount };
+            return { status: incompleteCount > 0 ? 'Incomplete' : 'Completed', count: incompleteCount };
         }
 
-        let currentFetchId = 0;
+        function processAggregateData(data) {
+            if (!data || !data.table) return [];
 
-        async function fetchData() {
-            currentFetchId++;
-            const myFetchId = currentFetchId;
+            const rows = data.table.rows;
+            const officerStats = {};
+            const now = new Date();
+            const sevenDaysAgo = new Date();
+            sevenDaysAgo.setDate(now.getDate() - 7);
 
-            const tableBody = document.getElementById('table-body');
-            const loading = document.getElementById('loading');
-            const table = document.getElementById('status-table');
-            
-            // Reset UI
-            tableBody.innerHTML = '';
-            table.style.display = 'none';
-            loading.style.display = 'block';
-            document.getElementById('count-completed').innerText = '-';
-            document.getElementById('count-incomplete').innerText = '-';
-            document.getElementById('count-total').innerText = OFFICERS.length;
+            for (const row of rows) {
+                if (!row.c) continue;
+                
+                const officerCell = row.c[1];
+                const dateCell = row.c[8];
+                const statusCell = row.c[9];
 
-            let completedCount = 0;
-            let incompleteCount = 0;
+                if (!officerCell || !officerCell.v) continue;
+                const officerName = String(officerCell.v).trim();
+                
+                if (!officerStats[officerName]) {
+                    officerStats[officerName] = { completedRecent: 0, pending: 0 };
+                }
 
-            // Use Promise.all to fetch concurrently
-            const promises = OFFICERS.map(async (officer) => {
-                const data = await fetchSheetData(officer.gid);
-                let result = { status: 'Error', count: 0 };
-                if (data) {
-                    if (data.status === 'error') {
-                        result.status = 'Sheet Error';
-                        if (data.errors && data.errors.length > 0) {
-                             console.error(`Sheet Error for ${officer.name}:`, data.errors);
-                        }
-                    } else {
-                        result = analyzeData(data);
+                const status = statusCell && statusCell.v ? String(statusCell.v).toLowerCase() : '';
+                
+                // Parse date
+                let entryDate = null;
+                if (dateCell && dateCell.v) {
+                    const dateStr = String(dateCell.v);
+                    const match = dateStr.match(/Date\((\d+),(\d+),(\d+)\)/);
+                    if (match) {
+                        entryDate = new Date(parseInt(match[1]), parseInt(match[2]), parseInt(match[3]));
+                    }
+                }
+
+                if (status === 'completed') {
+                    if (entryDate && entryDate >= sevenDaysAgo) {
+                        officerStats[officerName].completedRecent++;
                     }
                 } else {
-                    result.status = 'Fetch Error';
+                    officerStats[officerName].pending++;
+                }
+            }
+            
+            return Object.keys(officerStats).map(name => ({
+                name: name,
+                completedRecent: officerStats[name].completedRecent,
+                pending: officerStats[name].pending
+            }));
+        }
+
+        async function refreshData() {
+            const loading = document.getElementById('loading');
+            const mainContent = document.getElementById('main-content');
+            const chartSection = document.getElementById('chart-section');
+            
+            loading.style.display = 'block';
+            mainContent.style.display = 'none';
+            chartSection.style.display = 'none';
+
+            // 1. Fetch Officer Statuses (Left Table)
+            const officerPromises = OFFICERS.map(async (officer) => {
+                const data = await fetchGvizData(SPREADSHEET_ID, officer.gid);
+                let result = { status: 'Error', count: 0 };
+                if (data && data.status !== 'error') {
+                    result = analyzeOfficerData(data);
                 }
                 return { name: officer.name, status: result.status, count: result.count };
             });
 
-            const officerResults = await Promise.all(promises);
+            // 2. Fetch Aggregate Data (Right Table)
+            const aggregatePromise = fetchGvizData(AGGREGATE_SHEET_ID, AGGREGATE_GID);
 
-            // Check race condition
-            if (myFetchId !== currentFetchId) {
-                console.log("Stale fetch ignored.");
-                return;
-            }
+            const [officerResults, aggregateData] = await Promise.all([
+                Promise.all(officerPromises),
+                aggregatePromise
+            ]);
 
-            // Clear again to be safe
-            tableBody.innerHTML = '';
+            // Render Officer Table (Left)
+            const statusTableBody = document.getElementById('table-body');
+            statusTableBody.innerHTML = '';
+            let totalCompleted = 0;
+            let totalIncomplete = 0;
 
             officerResults.forEach(res => {
                 const tr = document.createElement('tr');
-                const nameTd = document.createElement('td');
-                nameTd.textContent = res.name;
-                
-                const statusTd = document.createElement('td');
-                const badge = document.createElement('span');
-                badge.className = 'badge';
-                
-                if (res.status === 'Completed') {
-                    badge.classList.add('badge-completed');
-                    badge.textContent = 'Completed';
-                    completedCount++;
-                } else if (res.status === 'Incomplete') {
-                    badge.classList.add('badge-incomplete');
-                    badge.textContent = 'Incomplete';
-                    incompleteCount++;
-                } else {
-                    badge.classList.add('badge-error');
-                    badge.textContent = res.status;
-                }
-                statusTd.appendChild(badge);
-                
-                const countTd = document.createElement('td');
-                if (res.count >= 0) {
-                     countTd.textContent = res.count;
-                     if (res.count > 0) {
-                         countTd.style.fontWeight = 'bold';
-                         countTd.style.color = '#c0392b';
-                     } else {
-                         countTd.style.color = '#27ae60';
-                     }
-                } else {
-                    countTd.textContent = '-';
-                }
+                tr.innerHTML = `
+                    <td>${res.name}</td>
+                    <td><span class="badge ${res.status === 'Completed' ? 'badge-completed' : (res.status === 'Incomplete' ? 'badge-incomplete' : 'badge-error')}">${res.status}</span></td>
+                    <td style="${res.count > 0 ? 'color: #c0392b; font-weight: bold;' : 'color: #27ae60;'}">${res.count >= 0 ? res.count : '-'}</td>
+                `;
+                statusTableBody.appendChild(tr);
 
-                tr.appendChild(nameTd);
-                tr.appendChild(statusTd);
-                tr.appendChild(countTd);
-
-                tableBody.appendChild(tr);
+                if (res.status === 'Completed') totalCompleted++;
+                if (res.status === 'Incomplete') totalIncomplete++;
             });
 
-            document.getElementById('count-completed').innerText = completedCount;
-            document.getElementById('count-incomplete').innerText = incompleteCount;
-            
+            document.getElementById('count-completed').innerText = totalCompleted;
+            document.getElementById('count-incomplete').innerText = totalIncomplete;
+            document.getElementById('count-total').innerText = OFFICERS.length;
+
+            // Render Aggregate Table (Right)
+            const statsTableBody = document.getElementById('stats-body');
+            statsTableBody.innerHTML = '';
+            const stats = processAggregateData(aggregateData);
+            stats.sort((a, b) => b.pending - a.pending);
+
+            stats.forEach(stat => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${stat.name}</td>
+                    <td>${stat.completedRecent}</td>
+                    <td style="${stat.pending > 0 ? 'color: #c0392b; font-weight: bold;' : ''}">${stat.pending}</td>
+                `;
+                statsTableBody.appendChild(tr);
+            });
+
+            // Render Chart - USING OFFICER RESULTS (Individual Sheets)
+            // Filter to show only officers with pending tasks for better visibility, or all?
+            // Let's show all to be consistent.
+            renderChart(officerResults);
+
+            // Show UI
             loading.style.display = 'none';
-            table.style.display = 'table';
-            
-            const now = new Date();
-            document.getElementById('last-updated').innerText = 'Last Updated: ' + now.toLocaleString();
+            mainContent.style.display = 'grid';
+            chartSection.style.display = 'block';
+            document.getElementById('last-updated').innerText = 'Last Updated: ' + new Date().toLocaleString();
         }
 
-        // Initialize 
-        fetchData();
+        function renderChart(officerData) {
+            const ctx = document.getElementById('pendingChart').getContext('2d');
+            
+            if (pendingChartInstance) {
+                pendingChartInstance.destroy();
+            }
+
+            // Use the data from individual sheets
+            const labels = officerData.map(o => o.name);
+            const data = officerData.map(o => Math.max(0, o.count)); // Ensure no -1s
+
+            pendingChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Incomplete Tasks (Weekly)',
+                        data: data,
+                        backgroundColor: 'rgba(231, 76, 60, 0.7)',
+                        borderColor: 'rgba(231, 76, 60, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            stepSize: 1,
+                            suggestedMax: 5 // Ensure small numbers look okay
+                        }
+                    }
+                }
+            });
+        }
+
+        refreshData();
     </script>
 </body>
 </html>
